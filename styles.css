@@ -64,6 +64,127 @@ header h1 {
     border: 1px solid var(--border);
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-help-btn {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.header-help-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.onboarding-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(10px);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.onboarding-modal {
+    width: 100%;
+    max-width: 420px;
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98));
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 20px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.onboarding-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.onboarding-eyebrow {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+.onboarding-close {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.onboarding-steps {
+    display: grid;
+    gap: 12px;
+}
+
+.onboarding-step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.onboarding-step h3 {
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    font-size: 0.98rem;
+}
+
+.onboarding-step p {
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+
+.step-number {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.onboarding-footer {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+}
+
 main {
     flex: 1;
     overflow-y: auto;
@@ -375,6 +496,17 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 420px) {
+    .header-actions {
+        gap: 6px;
+    }
+
+    .header-help-btn,
+    .badge {
+        font-size: 0.68rem;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
     .balances-list li,
     .history-list li {
         align-items: flex-start;
@@ -394,5 +526,9 @@ input[type="checkbox"] {
 
     .action-btn {
         flex: 1;
+    }
+
+    .onboarding-footer {
+        flex-direction: column;
     }
 }
