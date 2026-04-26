@@ -29,7 +29,7 @@
                         <span class="step-number">1</span>
                         <div>
                             <h3>Set up the trip</h3>
-                            <p>Open <strong>Settings</strong>, add your travelers, then choose your base and local currencies.</p>
+                            <p>Open <strong>Settings</strong>, add your friends, then choose your base and local currencies.</p>
                         </div>
                     </div>
                     <div class="onboarding-step">
@@ -166,6 +166,17 @@
             <section id="view-settings" class="view" data-html2canvas-ignore>
                 <h2>Trip Settings</h2>
                 <div class="card">
+                    <h3>Friends</h3>
+                    <div class="form-group input-with-btn">
+                        <input type="text" id="new-friend-name" placeholder="Friend's name">
+                        <button id="btn-add-friend" class="btn secondary-btn">Add</button>
+                    </div>
+                    <ul id="friends-list" class="pill-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+
+                <div class="card">
                     <h3>Currencies</h3>
                     <div class="form-group">
                             <label>Base Currency</label>
@@ -208,17 +219,6 @@
 
                     <button id="btn-fetch-rate" class="btn secondary-btn" style="margin-top: 10px;">Fetch Live Rate</button>
                     <small class="hint" style="margin-top:8px;">Fetch fills the current live rate. Each saved expense keeps the rate it was created with.</small>
-                </div>
-
-                <div class="card">
-                    <h3>Friends</h3>
-                    <div class="form-group input-with-btn">
-                        <input type="text" id="new-friend-name" placeholder="Friend's name">
-                        <button id="btn-add-friend" class="btn secondary-btn">Add</button>
-                    </div>
-                    <ul id="friends-list" class="pill-list">
-                        <!-- Populated by JS -->
-                    </ul>
                 </div>
                 
                 <div class="card" style="margin-top:20px;">
