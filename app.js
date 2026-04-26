@@ -23,6 +23,7 @@ const elements = {
     baseAmount: document.getElementById('base-amount'),
     settingLocalCurr: document.getElementById('setting-local-curr'),
     settingRate: document.getElementById('setting-rate'),
+    btnSwapCurrencies: document.getElementById('btn-swap-currencies'),
     btnFetchRate: document.getElementById('btn-fetch-rate'),
     newFriendName: document.getElementById('new-friend-name'),
     btnAddFriend: document.getElementById('btn-add-friend'),
@@ -233,6 +234,7 @@ function bindEvents() {
         }
     });
 
+    elements.btnSwapCurrencies.addEventListener('click', swapCurrencies);
     elements.btnFetchRate.addEventListener('click', () => fetchLiveRate(false));
     elements.btnDownloadCsv.addEventListener('click', downloadCSV);
     elements.btnClearData.addEventListener('click', triggerHardWipe);
@@ -353,6 +355,27 @@ function triggerHardWipe() {
     } else if (confirmation !== null) {
         alert("Invalid word. Wipe cancelled.");
     }
+}
+
+function swapCurrencies() {
+    const currentBaseAmount = numberOrFallback(elements.baseAmount.value, 1);
+    const currentLocalAmount = numberOrFallback(elements.settingRate.value, currentBaseAmount * state.exchangeRate);
+    const previousBaseCurrency = state.baseCurrency;
+
+    state.baseCurrency = state.localCurrency || previousBaseCurrency;
+    state.localCurrency = previousBaseCurrency;
+
+    if (Number.isFinite(state.exchangeRate) && state.exchangeRate > 0) {
+        state.exchangeRate = 1 / state.exchangeRate;
+    }
+
+    elements.baseAmount.value = formatNumber(currentLocalAmount, 4);
+    elements.settingRate.value = formatNumber(currentBaseAmount, 4);
+    elements.settingBaseCurr.value = state.baseCurrency;
+    elements.settingLocalCurr.value = state.localCurrency;
+
+    saveAndRender();
+    showToast(`Swapped ${state.localCurrency} and ${state.baseCurrency}.`);
 }
 
 function getExpenseAmountInSelectedBase(expense) {
