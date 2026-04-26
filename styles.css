@@ -165,6 +165,34 @@ input:focus, select:focus {
     color: var(--text-secondary);
 }
 
+.currency-swap-row {
+    display: flex;
+    justify-content: center;
+    margin: -5px 0 10px 0;
+}
+
+.swap-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-color);
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.swap-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.swap-btn:active {
+    transform: scale(0.96);
+}
+
 /* Buttons */
 .btn {
     width: 100%;
