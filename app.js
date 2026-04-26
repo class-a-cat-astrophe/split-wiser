@@ -5,7 +5,8 @@ const DEFAULT_STATE = {
     localCurrency: "JPY",
     exchangeRate: 110,
     fetchDate: null,
-    historicalRates: {}
+    historicalRates: {},
+    hasSeenOnboarding: false
 };
 
 let state = structuredClone(DEFAULT_STATE);
@@ -18,6 +19,11 @@ const elements = {
     appTitle: document.getElementById('app-title'),
     canvasHeader: document.getElementById('canvas-header'),
     toast: document.getElementById('toast'),
+    onboardingOverlay: document.getElementById('onboarding-overlay'),
+    btnOpenOnboarding: document.getElementById('btn-open-onboarding'),
+    btnCloseOnboarding: document.getElementById('btn-close-onboarding'),
+    btnOnboardingDone: document.getElementById('btn-onboarding-done'),
+    btnOnboardingGoSettings: document.getElementById('btn-onboarding-go-settings'),
 
     settingBaseCurr: document.getElementById('setting-base-curr'),
     baseAmount: document.getElementById('base-amount'),
@@ -52,6 +58,7 @@ async function init() {
     loadState();
     bindEvents();
     renderAll();
+    maybeShowOnboarding();
     await checkAutoRefresh();
 }
 
@@ -133,7 +140,8 @@ function migrateState(rawState) {
         fetchDate: rawState.fetchDate || null,
         historicalRates: rawState.historicalRates && typeof rawState.historicalRates === "object"
             ? rawState.historicalRates
-            : {}
+            : {},
+        hasSeenOnboarding: Boolean(rawState.hasSeenOnboarding)
     };
 }
 
@@ -177,20 +185,8 @@ function migrateExpense(rawExpense, context) {
 function bindEvents() {
     elements.navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            elements.navBtns.forEach(navBtn => navBtn.classList.remove('active'));
-            btn.classList.add('active');
-
             const targetId = btn.getAttribute('data-target');
-            elements.views.forEach(view => view.classList.remove('active-view'));
-            document.getElementById(targetId).classList.add('active-view');
-
-            if (targetId !== 'view-add-expense' && editingExpenseId) {
-                cancelEditMode();
-            }
-
-            if (targetId === 'view-balances') renderBalances();
-            if (targetId === 'view-history') renderHistory();
-            if (targetId === 'view-add-expense') renderAddExpenseForm();
+            openView(targetId);
         });
     });
 
@@ -242,6 +238,16 @@ function bindEvents() {
     elements.btnSaveExpense.addEventListener('click', saveExpense);
     elements.btnCancelEdit.addEventListener('click', cancelEditMode);
     elements.btnGeolocate.addEventListener('click', autoFetchLocation);
+    elements.btnOpenOnboarding.addEventListener('click', () => openOnboarding(false));
+    elements.btnCloseOnboarding.addEventListener('click', closeOnboarding);
+    elements.btnOnboardingDone.addEventListener('click', closeOnboarding);
+    elements.btnOnboardingGoSettings.addEventListener('click', () => {
+        closeOnboarding();
+        openView('view-settings');
+    });
+    elements.onboardingOverlay.addEventListener('click', event => {
+        if (event.target === elements.onboardingOverlay) closeOnboarding();
+    });
 
     elements.friendsList.addEventListener('click', event => {
         const button = event.target.closest('[data-remove-friend]');
@@ -355,6 +361,41 @@ function triggerHardWipe() {
     } else if (confirmation !== null) {
         alert("Invalid word. Wipe cancelled.");
     }
+}
+
+function maybeShowOnboarding() {
+    if (!state.hasSeenOnboarding) {
+        openOnboarding(true);
+    }
+}
+
+function openOnboarding(markAsSeen = false) {
+    elements.onboardingOverlay.classList.remove('hidden');
+    if (markAsSeen && !state.hasSeenOnboarding) {
+        state.hasSeenOnboarding = true;
+        saveState();
+    }
+}
+
+function closeOnboarding() {
+    elements.onboardingOverlay.classList.add('hidden');
+}
+
+function openView(targetId) {
+    elements.navBtns.forEach(button => {
+        button.classList.toggle('active', button.getAttribute('data-target') === targetId);
+    });
+    elements.views.forEach(view => {
+        view.classList.toggle('active-view', view.id === targetId);
+    });
+
+    if (targetId !== 'view-add-expense' && editingExpenseId) {
+        cancelEditMode();
+    }
+
+    if (targetId === 'view-balances') renderBalances();
+    if (targetId === 'view-history') renderHistory();
+    if (targetId === 'view-add-expense') renderAddExpenseForm();
 }
 
 function swapCurrencies() {
