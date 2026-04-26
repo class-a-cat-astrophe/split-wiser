@@ -12,10 +12,56 @@
     <div class="app-container">
         <!-- Toast -->
         <div id="toast" class="toast"></div>
+        <div id="onboarding-overlay" class="onboarding-overlay hidden" data-html2canvas-ignore>
+            <div class="onboarding-modal" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+                <div class="onboarding-header">
+                    <div>
+                        <p class="onboarding-eyebrow">First time here?</p>
+                        <h2 id="onboarding-title">How Split Wiser works</h2>
+                    </div>
+                    <button id="btn-close-onboarding" class="onboarding-close" type="button" aria-label="Close how-to guide">✕</button>
+                </div>
+                <div class="onboarding-steps">
+                    <div class="onboarding-step">
+                        <span class="step-number">1</span>
+                        <div>
+                            <h3>Set up the trip</h3>
+                            <p>Open <strong>Settings</strong>, add your travelers, then choose your base and local currencies.</p>
+                        </div>
+                    </div>
+                    <div class="onboarding-step">
+                        <span class="step-number">2</span>
+                        <div>
+                            <h3>Log each shared expense</h3>
+                            <p>Go to <strong>Add</strong>, enter what was spent, who paid, and who should be included in the split.</p>
+                        </div>
+                    </div>
+                    <div class="onboarding-step">
+                        <span class="step-number">3</span>
+                        <div>
+                            <h3>Check or fix the history</h3>
+                            <p>Use <strong>History</strong> to review old entries, then edit or delete anything that looks wrong.</p>
+                        </div>
+                    </div>
+                    <div class="onboarding-step">
+                        <span class="step-number">4</span>
+                        <div>
+                            <h3>See who owes whom</h3>
+                            <p>Open <strong>Settle</strong> to see the balances, then share the image with your group when you are ready.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="onboarding-footer">
+                    <button id="btn-onboarding-go-settings" class="btn secondary-btn" type="button">Start With Settings</button>
+                    <button id="btn-onboarding-done" class="btn primary-btn" type="button">Got It</button>
+                </div>
+            </div>
+        </div>
         <!-- Header -->
         <header data-html2canvas-ignore>
             <h1 id="app-title">Split Wiser</h1>
             <div class="header-actions">
+                <button id="btn-open-onboarding" class="header-help-btn" type="button" aria-label="Open how-to guide">How To Use</button>
                 <span class="badge" style="background:transparent; border:none; opacity:0.7;">Each expense keeps its saved rate</span>
             </div>
         </header> 
