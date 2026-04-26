@@ -327,11 +327,11 @@ input[type="checkbox"] {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
     cursor: pointer;
     width: 60px;
     transition: color 0.2s;
-    transform: translateY(-9px);
+    transform: translateY(-18px);
 }
 .nav-btn svg {
     width: 26.4px;
