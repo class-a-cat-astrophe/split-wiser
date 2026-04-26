@@ -1,25 +1,24 @@
-// --- STATE ---
-let state = {
+const DEFAULT_STATE = {
     friends: [],
     expenses: [],
     baseCurrency: "SGD",
     localCurrency: "JPY",
-    exchangeRate: 110, // 1 SGD = 110 JPY
+    exchangeRate: 110,
     fetchDate: null,
     historicalRates: {}
 };
 
-let editingExpenseId = null; // Used for V2 Editing feature
+let state = structuredClone(DEFAULT_STATE);
+let editingExpenseId = null;
+let editingOriginalDate = null;
 
-// --- DOM ELEMENTS ---
 const elements = {
     views: document.querySelectorAll('.view'),
     navBtns: document.querySelectorAll('.nav-btn'),
     appTitle: document.getElementById('app-title'),
     canvasHeader: document.getElementById('canvas-header'),
     toast: document.getElementById('toast'),
-    
-    // Settings
+
     settingBaseCurr: document.getElementById('setting-base-curr'),
     baseAmount: document.getElementById('base-amount'),
     settingLocalCurr: document.getElementById('setting-local-curr'),
@@ -30,8 +29,7 @@ const elements = {
     friendsList: document.getElementById('friends-list'),
     btnClearData: document.getElementById('btn-clear-data'),
     btnDownloadCsv: document.getElementById('btn-download-csv'),
-    
-    // Add Expense
+
     expCategory: document.getElementById('expense-category'),
     expDesc: document.getElementById('expense-desc'),
     btnGeolocate: document.getElementById('btn-geolocate'),
@@ -41,8 +39,7 @@ const elements = {
     splitCheckboxes: document.getElementById('split-checkboxes'),
     btnSaveExpense: document.getElementById('btn-save-expense'),
     btnCancelEdit: document.getElementById('btn-cancel-edit'),
-    
-    // Balances & History
+
     settlementsList: document.getElementById('settlements-list'),
     balancesList: document.getElementById('balances-list'),
     historyList: document.getElementById('history-list'),
@@ -50,7 +47,6 @@ const elements = {
     dashboardArea: document.getElementById('dashboard-capture-area')
 };
 
-// --- INITIALIZATION ---
 async function init() {
     loadState();
     bindEvents();
@@ -60,436 +56,663 @@ async function init() {
 
 async function checkAutoRefresh() {
     const today = new Date().toLocaleDateString();
-    if (state.fetchDate !== today && state.localCurrency !== "LOCAL") {
+    if (state.fetchDate !== today && state.localCurrency) {
         await fetchLiveRate(true);
     }
 }
 
 let toastTimeout;
-function showToast(msg, isError = false) {
-    elements.toast.textContent = msg;
-    if(isError) elements.toast.classList.add('toast-error');
-    else elements.toast.classList.remove('toast-error');
-    
+function showToast(message, isError = false) {
+    elements.toast.textContent = message;
+    elements.toast.classList.toggle('toast-error', isError);
     elements.toast.classList.add('show');
+
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
         elements.toast.classList.remove('show');
     }, 3000);
 }
 
-// --- STORAGE ---
+function normalizeCurrencyCode(value, fallback = "") {
+    return (value || fallback || "").trim().toUpperCase();
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function numberOrFallback(value, fallback) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function formatNumber(value, digits = 2) {
+    return parseFloat(Number(value).toFixed(digits)).toString();
+}
+
 function saveState() {
     localStorage.setItem('tripSplitterState', JSON.stringify(state));
 }
 
 function loadState() {
-    const saved = localStorage.getItem('tripSplitterState');
-    if (saved) {
-        state = JSON.parse(saved);
-        if (!state.expenses) state.expenses = [];
-        if (!state.friends) state.friends = [];
-        if (!state.historicalRates) state.historicalRates = {};
+    try {
+        const saved = localStorage.getItem('tripSplitterState');
+        if (!saved) {
+            state = structuredClone(DEFAULT_STATE);
+            return;
+        }
+
+        const parsed = JSON.parse(saved);
+        state = migrateState(parsed);
+        saveState();
+    } catch (error) {
+        console.error("Failed to load state:", error);
+        state = structuredClone(DEFAULT_STATE);
     }
 }
 
-// --- NAVIGATION & EVENTS ---
+function migrateState(rawState) {
+    const baseCurrency = normalizeCurrencyCode(rawState.baseCurrency, DEFAULT_STATE.baseCurrency);
+    const localCurrency = normalizeCurrencyCode(rawState.localCurrency, DEFAULT_STATE.localCurrency);
+    const exchangeRate = numberOrFallback(rawState.exchangeRate, DEFAULT_STATE.exchangeRate);
+
+    return {
+        friends: Array.isArray(rawState.friends) ? rawState.friends.map(name => String(name).trim()).filter(Boolean) : [],
+        expenses: Array.isArray(rawState.expenses)
+            ? rawState.expenses.map(expense => migrateExpense(expense, { baseCurrency, localCurrency, exchangeRate }))
+            : [],
+        baseCurrency,
+        localCurrency,
+        exchangeRate,
+        fetchDate: rawState.fetchDate || null,
+        historicalRates: rawState.historicalRates && typeof rawState.historicalRates === "object"
+            ? rawState.historicalRates
+            : {}
+    };
+}
+
+function migrateExpense(rawExpense, context) {
+    const amount = numberOrFallback(rawExpense.amount, 0);
+    const rateSnapshot = numberOrFallback(rawExpense.rateSnapshot, context.exchangeRate || 1);
+    const baseCurrencySnapshot = normalizeCurrencyCode(
+        rawExpense.baseCurrencySnapshot,
+        context.baseCurrency
+    );
+    const localCurrencySnapshot = normalizeCurrencyCode(
+        rawExpense.localCurrencySnapshot,
+        context.localCurrency
+    );
+    const currency = normalizeCurrencyCode(rawExpense.currency, baseCurrencySnapshot);
+
+    let amountBase = numberOrFallback(rawExpense.amountBase, NaN);
+    if (!Number.isFinite(amountBase)) {
+        amountBase = numberOrFallback(rawExpense.amountSGD, NaN);
+    }
+    if (!Number.isFinite(amountBase)) {
+        amountBase = currency === baseCurrencySnapshot ? amount : amount / Math.max(rateSnapshot, 1e-9);
+    }
+
+    return {
+        id: rawExpense.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        category: rawExpense.category || "Shopping & Misc",
+        desc: rawExpense.desc || "",
+        amount,
+        currency,
+        amountBase,
+        rateSnapshot,
+        baseCurrencySnapshot,
+        localCurrencySnapshot,
+        payer: rawExpense.payer || "",
+        splitAmong: Array.isArray(rawExpense.splitAmong) ? rawExpense.splitAmong.map(String) : [],
+        date: rawExpense.date || new Date().toISOString()
+    };
+}
+
 function bindEvents() {
     elements.navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            elements.navBtns.forEach(b => b.classList.remove('active'));
+            elements.navBtns.forEach(navBtn => navBtn.classList.remove('active'));
             btn.classList.add('active');
-            
+
             const targetId = btn.getAttribute('data-target');
-            elements.views.forEach(v => v.classList.remove('active-view'));
+            elements.views.forEach(view => view.classList.remove('active-view'));
             document.getElementById(targetId).classList.add('active-view');
-            
-            // If navigating away from add-expense, cancel any edit mode seamlessly
-            if (targetId !== 'view-add-expense' && editingExpenseId) cancelEditMode(); 
-            
+
+            if (targetId !== 'view-add-expense' && editingExpenseId) {
+                cancelEditMode();
+            }
+
             if (targetId === 'view-balances') renderBalances();
             if (targetId === 'view-history') renderHistory();
             if (targetId === 'view-add-expense') renderAddExpenseForm();
         });
     });
-    
-    // Settings
+
     elements.btnAddFriend.addEventListener('click', addFriend);
-    elements.newFriendName.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') addFriend();
+    elements.newFriendName.addEventListener('keypress', event => {
+        if (event.key === 'Enter') addFriend();
     });
-    elements.settingBaseCurr.addEventListener('change', async (e) => {
-        state.baseCurrency = e.target.value.toUpperCase() || "SGD";
-        e.target.value = state.baseCurrency;
+
+    elements.settingBaseCurr.addEventListener('change', event => {
+        const nextBaseCurrency = normalizeCurrencyCode(event.target.value, state.baseCurrency || DEFAULT_STATE.baseCurrency);
+        state.baseCurrency = nextBaseCurrency || DEFAULT_STATE.baseCurrency;
+        event.target.value = state.baseCurrency;
         saveAndRender();
-        await fetchLiveRate(true);
+        fetchLiveRate(true);
     });
-    elements.settingLocalCurr.addEventListener('change', async (e) => {
-        state.localCurrency = e.target.value.toUpperCase() || "LOCAL";
+
+    elements.settingLocalCurr.addEventListener('change', event => {
+        state.localCurrency = normalizeCurrencyCode(event.target.value, state.localCurrency || DEFAULT_STATE.localCurrency);
+        event.target.value = state.localCurrency;
         renderAddExpenseForm();
         saveAndRender();
-        if (state.localCurrency !== "LOCAL") await fetchLiveRate(true);
+        fetchLiveRate(true);
     });
-    
-    // Dynamic Calculator
-    elements.baseAmount.addEventListener('input', (e) => {
-        const baseVal = parseFloat(e.target.value) || 0;
-        if(baseVal > 0) {
-            elements.settingRate.value = +(baseVal * state.exchangeRate).toFixed(4);
+
+    elements.baseAmount.addEventListener('input', event => {
+        const baseValue = numberOrFallback(event.target.value, 0);
+        if (baseValue > 0) {
+            elements.settingRate.value = (baseValue * state.exchangeRate).toFixed(4).replace(/\.?0+$/, "");
         }
     });
 
-    elements.settingRate.addEventListener('change', (e) => {
-        const localVal = parseFloat(e.target.value) || 0;
-        const baseVal = parseFloat(elements.baseAmount.value) || 1;
-        if(baseVal > 0 && localVal > 0) {
-            state.exchangeRate = localVal / baseVal;
+    elements.settingRate.addEventListener('change', event => {
+        const localValue = numberOrFallback(event.target.value, 0);
+        const baseValue = numberOrFallback(elements.baseAmount.value, 1);
+
+        if (baseValue > 0 && localValue > 0) {
+            state.exchangeRate = localValue / baseValue;
             const today = new Date().toLocaleDateString();
             state.historicalRates[today] = state.exchangeRate;
             saveAndRender();
         }
     });
-    
+
     elements.btnFetchRate.addEventListener('click', () => fetchLiveRate(false));
     elements.btnDownloadCsv.addEventListener('click', downloadCSV);
     elements.btnClearData.addEventListener('click', triggerHardWipe);
-    
-    // Add Expense / Edit functionality
+
     elements.btnSaveExpense.addEventListener('click', saveExpense);
     elements.btnCancelEdit.addEventListener('click', cancelEditMode);
     elements.btnGeolocate.addEventListener('click', autoFetchLocation);
-    
-    // Sharing
+
+    elements.friendsList.addEventListener('click', event => {
+        const button = event.target.closest('[data-remove-friend]');
+        if (!button) return;
+        removeFriend(button.getAttribute('data-remove-friend'));
+    });
+
+    elements.historyList.addEventListener('click', event => {
+        const actionButton = event.target.closest('[data-action]');
+        if (!actionButton) return;
+
+        const expenseId = actionButton.getAttribute('data-expense-id');
+        if (actionButton.getAttribute('data-action') === 'edit') {
+            setupEditExpense(expenseId);
+        }
+        if (actionButton.getAttribute('data-action') === 'delete') {
+            deleteExpense(expenseId);
+        }
+    });
+
     elements.btnShareDash.addEventListener('click', shareDashboardImage);
 }
 
-// --- LOGIC: FRIENDS & SETTINGS ---
 function addFriend() {
     const name = elements.newFriendName.value.trim();
     if (!name) {
-        return showToast("Error: Please enter a name.", true);
+        showToast("Error: Please enter a name.", true);
+        return;
     }
-    if (state.friends.some(f => f.toLowerCase() === name.toLowerCase())) {
-        return showToast("Error: That person is already in the trip!", true);
+
+    if (state.friends.some(friend => friend.toLowerCase() === name.toLowerCase())) {
+        showToast("Error: That person is already in the trip.", true);
+        return;
     }
+
     state.friends.push(name);
     elements.newFriendName.value = '';
     saveAndRender();
-    showToast(`${name} was added to the trip!`);
+    showToast(`${name} joined the trip.`);
 }
 
 function removeFriend(name) {
+    if (!name) return;
+
+    const isReferenced = state.expenses.some(expense =>
+        expense.payer === name || expense.splitAmong.includes(name)
+    );
+
+    if (isReferenced) {
+        showToast("Edit or delete related expenses before removing that traveler.", true);
+        return;
+    }
+
     if (confirm(`Remove ${name} from the trip list?`)) {
-        state.friends = state.friends.filter(f => f !== name);
+        state.friends = state.friends.filter(friend => friend !== name);
         saveAndRender();
+        showToast(`${name} was removed from this trip.`);
     }
 }
 
 async function fetchLiveRate(isAuto = false) {
-    if(!state.localCurrency || state.localCurrency === "LOCAL") {
-        if(!isAuto) showToast("Error: Select a valid currency code first!", true);
+    if (!state.localCurrency) {
+        if (!isAuto) showToast("Error: Set a local currency first.", true);
         return;
     }
-    if(!isAuto) elements.btnFetchRate.textContent = "⌛ Fetching...";
-    try {
-        const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${state.baseCurrency}`);
-        const data = await res.json();
-        const rate = data.rates[state.localCurrency];
-        if (rate) {
-            state.exchangeRate = rate;
-            const today = new Date().toLocaleDateString();
-            state.fetchDate = today;
-            state.historicalRates[today] = rate;
-            
-            const baseVal = parseFloat(elements.baseAmount.value) || 1;
-            elements.settingRate.value = +(baseVal * rate).toFixed(4);
-            
-            saveAndRender();
-            if(!isAuto) showToast(`Live mapped to exactly ${rate}`);
-        } else {
-            if(!isAuto) showToast(`Error: ${state.localCurrency} is not supported.`, true);
-        }
-    } catch(err) {
-        if(!isAuto) showToast("Error: API unavailable.", true);
+
+    if (!isAuto) {
+        elements.btnFetchRate.textContent = "⌛ Fetching...";
+        elements.btnFetchRate.disabled = true;
     }
-    if(!isAuto) elements.btnFetchRate.textContent = "Fetch Live Rate";
+
+    try {
+        const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${state.baseCurrency}`);
+        const data = await response.json();
+        const rate = data?.rates?.[state.localCurrency];
+
+        if (!Number.isFinite(rate)) {
+            throw new Error("Unsupported currency");
+        }
+
+        state.exchangeRate = rate;
+        const today = new Date().toLocaleDateString();
+        state.fetchDate = today;
+        state.historicalRates[today] = rate;
+
+        const baseValue = numberOrFallback(elements.baseAmount.value, 1);
+        elements.settingRate.value = (baseValue * rate).toFixed(4).replace(/\.?0+$/, "");
+
+        saveAndRender();
+        if (!isAuto) showToast(`Live rate updated: 1 ${state.baseCurrency} = ${rate} ${state.localCurrency}`);
+    } catch (error) {
+        console.error("Failed to fetch live rate:", error);
+        if (!isAuto) showToast("Error: Live exchange rate unavailable.", true);
+    } finally {
+        if (!isAuto) {
+            elements.btnFetchRate.textContent = "Fetch Live Rate";
+            elements.btnFetchRate.disabled = false;
+        }
+    }
 }
 
-// HARDENED WIPE (V2)
 function triggerHardWipe() {
-    const word = prompt("🧨 DANGER: This wipes all trip data permanently. Type 'DELETE' to confirm:");
-    if (word && word.toUpperCase() === "DELETE") {
+    const confirmation = prompt("Delete all trip data? Type DELETE to confirm:");
+    if (confirmation && confirmation.toUpperCase() === "DELETE") {
         localStorage.removeItem('tripSplitterState');
-        state = { friends: [], expenses: [], baseCurrency: "SGD", localCurrency: "LOCAL", exchangeRate: 1, fetchDate: null, historicalRates: {} };
+        state = structuredClone(DEFAULT_STATE);
         editingExpenseId = null;
+        editingOriginalDate = null;
         saveAndRender();
-        alert("Data wiped.");
-    } else if (word !== null) {
+        alert("All trip data was removed.");
+    } else if (confirmation !== null) {
         alert("Invalid word. Wipe cancelled.");
     }
 }
 
-// CSV EXPORT (V2)
+function getExpenseAmountInSelectedBase(expense) {
+    const storedAmountBase = numberOrFallback(expense.amountBase, 0);
+    const snapshotBaseCurrency = expense.baseCurrencySnapshot || state.baseCurrency;
+
+    if (snapshotBaseCurrency === state.baseCurrency) {
+        return storedAmountBase;
+    }
+
+    const snapshotRate = numberOrFallback(expense.rateSnapshot, NaN);
+    const currentRate = numberOrFallback(state.exchangeRate, NaN);
+
+    if (Number.isFinite(snapshotRate) && snapshotRate > 0 && Number.isFinite(currentRate) && currentRate > 0) {
+        return storedAmountBase * (snapshotRate / currentRate);
+    }
+
+    return storedAmountBase;
+}
+
+function getCurrentBaseAmountLabel(expense) {
+    return `${getExpenseAmountInSelectedBase(expense).toFixed(2)} ${state.baseCurrency}`;
+}
+
 function downloadCSV() {
-    if (state.expenses.length === 0) return alert("Nothing to download yet!");
-    let csv = "Date,Description,Payer,Amount,Currency,AmountInSGD,SplitAmong\n";
-    state.expenses.forEach(exp => {
-        const dateStr = new Date(exp.date).toLocaleDateString();
-        // Wrap strings in quotes to prevent issue with commas within description
-        const splitNames = exp.splitAmong.join(' & ');
-        csv += `"${dateStr}","${exp.desc}","${exp.payer}",${exp.amount},"${exp.currency}",${exp.amountSGD.toFixed(2)},"${splitNames}"\n`;
+    if (state.expenses.length === 0) {
+        alert("Nothing to download yet.");
+        return;
+    }
+
+    const baseHeader = `AmountIn${state.baseCurrency}`;
+    let csv = `Date,Description,Payer,OriginalAmount,OriginalCurrency,${baseHeader},SplitAmong,RateSnapshot\n`;
+
+    state.expenses.forEach(expense => {
+        const dateString = new Date(expense.date).toLocaleDateString();
+        const splitNames = expense.splitAmong.join(' & ');
+        const snapshotLabel = `1 ${expense.baseCurrencySnapshot} = ${expense.rateSnapshot} ${expense.localCurrencySnapshot}`;
+        const currentBaseAmount = getExpenseAmountInSelectedBase(expense).toFixed(2);
+
+        csv += `"${dateString}","${expense.desc.replace(/"/g, '""')}","${expense.payer.replace(/"/g, '""')}",${expense.amount},"${expense.currency}",${currentBaseAmount},"${splitNames.replace(/"/g, '""')}","${snapshotLabel}"\n`;
     });
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "Trip_Splitter_Log.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "Trip_Splitter_Log.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
 }
 
-// GEOLOCATION AUTO FILL (V2)
 function autoFetchLocation() {
-    if (!navigator.geolocation) return alert("Geolocation not supported by your browser");
-    
+    if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser.");
+        return;
+    }
+
     elements.expDesc.placeholder = "Locating...";
     elements.btnGeolocate.textContent = "⌛";
-    
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude, longitude } = pos.coords;
+    elements.btnGeolocate.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(async position => {
+        const { latitude, longitude } = position.coords;
+
         try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-            const data = await res.json();
-            
-            // Build the most reasonable place name available
-            let placeName = data.address.city || data.address.town || data.address.village || data.address.suburb || data.address.county || "";
-            let context = data.address.country || data.address.state || "";
-            
-            let result = placeName ? `${placeName}, ${context}` : context;
-            if (result) elements.expDesc.value = `Expense in ${result}`;
-            
-        } catch(e) {
-            elements.expDesc.placeholder = "Failed to grab location";
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+            const data = await response.json();
+            const address = data.address || {};
+
+            const placeName = address.city || address.town || address.village || address.suburb || address.county || "";
+            const context = address.country || address.state || "";
+            const result = placeName ? `${placeName}, ${context}` : context;
+
+            if (result) {
+                elements.expDesc.value = `Expense in ${result}`;
+            }
+        } catch (error) {
+            console.error("Failed to reverse geocode:", error);
+            elements.expDesc.placeholder = "Could not fill location";
+        } finally {
+            elements.btnGeolocate.textContent = "📍";
+            elements.btnGeolocate.disabled = false;
         }
+    }, () => {
+        alert("Location access denied or unavailable.");
         elements.btnGeolocate.textContent = "📍";
-    }, (error) => {
-        alert("Location access denied or failed.");
-        elements.btnGeolocate.textContent = "📍";
+        elements.btnGeolocate.disabled = false;
         elements.expDesc.placeholder = "Dinner at Shibuya";
     });
 }
 
-// HTML2CANVAS SHARE FEATURE (V2)
 async function shareDashboardImage() {
+    const sharedAt = new Date().toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+    });
     elements.btnShareDash.textContent = "⌛ Building...";
-    elements.canvasHeader.style.display = 'block'; // Make title visible specifically for capture
-    
+    elements.btnShareDash.disabled = true;
+    elements.canvasHeader.style.display = 'block';
+
     try {
         const canvas = await html2canvas(elements.dashboardArea, {
             backgroundColor: '#1e293b',
-            scale: 2 // High res
+            scale: 2
         });
-        
-        elements.canvasHeader.style.display = 'none'; // hide title again for standard web view padding
-        
-        canvas.toBlob(async (blob) => {
+
+        elements.canvasHeader.style.display = 'none';
+
+        canvas.toBlob(async blob => {
+            if (!blob) {
+                alert("Failed to build image.");
+                return;
+            }
+
             const file = new File([blob], "trip_dashboard.png", { type: "image/png" });
-            
+
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({
                     title: 'Trip Settlement Dashboard',
-                    text: 'Here are the current balances for our trip!',
+                    text: `Here are the current balances for our trip. Shared on ${sharedAt}.`,
                     files: [file]
                 });
             } else {
-                // Fallback for browsers that don't support Web Share API with files
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = "trip_settlement_snapshot.png";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = "trip_settlement_snapshot.png";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-                alert("Your browser doesn't support direct sharing, so we downloaded the image to your device for you to attach manually!");
+                alert("Your browser downloaded the image so you can share it manually.");
             }
         });
-    } catch(err) {
-        alert("Failed to build image. Check console.");
-        console.error(err);
+    } catch (error) {
+        console.error(error);
+        alert("Failed to build image. Check the console for details.");
+    } finally {
+        elements.btnShareDash.textContent = "📸 Share Image";
+        elements.btnShareDash.disabled = false;
+        elements.canvasHeader.style.display = 'none';
     }
-    
-    elements.btnShareDash.textContent = "📸 Share Image";
-    elements.canvasHeader.style.display = 'none';
 }
 
-
-// --- LOGIC: ADD/EDIT EXPENSE (V2 Upgraded) ---
 function saveExpense() {
+    const isEditing = Boolean(editingExpenseId);
     const category = elements.expCategory.value;
     const desc = elements.expDesc.value.trim();
-    const amount = parseFloat(elements.expAmount.value);
-    const currency = elements.expCurrency.value; // "LOCAL" or "SGD"
+    const amount = numberOrFallback(elements.expAmount.value, NaN);
+    const currencyMode = elements.expCurrency.value;
     let payer = elements.expPayer.value;
-    
-    const checked = [];
-    document.querySelectorAll('.split-check').forEach(cb => {
-        if(cb.checked) checked.push(cb.value);
+
+    const splitAmong = [];
+    document.querySelectorAll('.split-check').forEach(checkbox => {
+        if (checkbox.checked) splitAmong.push(checkbox.value);
     });
-    
-    if (!category || isNaN(amount) || !currency) {
-        showToast("Error: Category, Amount, & Currency are required (*)", true);
+
+    if (!state.friends.length) {
+        showToast("Error: Add at least one traveler first.", true);
         return;
     }
-    
-    if (checked.length === 0) {
-        showToast("Error: Please include at least one person to split with.", true);
+
+    if (!category || !Number.isFinite(amount) || amount <= 0 || !currencyMode) {
+        showToast("Error: Category, amount, and currency are required.", true);
         return;
     }
-    
+
+    if (splitAmong.length === 0) {
+        showToast("Error: Include at least one traveler in the split.", true);
+        return;
+    }
+
     if (!payer) {
-        payer = state.friends.length > 0 ? state.friends[0] : "Unknown";
+        payer = state.friends[0];
     }
-    
-    const amountSGD = currency === "SGD" ? amount : (amount / state.exchangeRate);
-    
-    const expObj = {
+
+    const currency = currencyMode === "BASE" ? state.baseCurrency : state.localCurrency;
+    const rateSnapshot = numberOrFallback(state.exchangeRate, 1);
+    const amountBase = currencyMode === "BASE" ? amount : amount / Math.max(rateSnapshot, 1e-9);
+
+    const expense = {
         id: editingExpenseId || Date.now().toString(),
         category,
         desc,
         amount,
-        currency: currency === "SGD" ? "SGD" : state.localCurrency,
-        amountSGD,
-        rateSnapshot: state.exchangeRate,
+        currency,
+        amountBase,
+        rateSnapshot,
+        baseCurrencySnapshot: state.baseCurrency,
+        localCurrencySnapshot: state.localCurrency,
         payer,
-        splitAmong: checked,
-        date: new Date().toISOString()
+        splitAmong,
+        date: editingOriginalDate || new Date().toISOString()
     };
-    
+
     if (editingExpenseId) {
-        const index = state.expenses.findIndex(e => e.id === editingExpenseId);
-        if(index !== -1) state.expenses[index] = expObj;
+        const index = state.expenses.findIndex(existingExpense => existingExpense.id === editingExpenseId);
+        if (index !== -1) state.expenses[index] = expense;
     } else {
-        state.expenses.push(expObj);
+        state.expenses.push(expense);
     }
-    
+
     saveState();
-    cancelEditMode(); // Clears form
-    showToast("Expense correctly mapped & saved!");
+    cancelEditMode();
+    renderBalances();
+    renderHistory();
+    showToast(isEditing ? "Expense updated." : "Expense saved.");
 }
 
 function setupEditExpense(id) {
-    const exp = state.expenses.find(e => e.id === id);
-    if (!exp) return;
-    
-    editingExpenseId = exp.id;
-    
-    // Jump to add view
+    const expense = state.expenses.find(entry => entry.id === id);
+    if (!expense) return;
+
+    editingExpenseId = expense.id;
+    editingOriginalDate = expense.date;
+
     document.querySelector('[data-target="view-add-expense"]').click();
-    
-    if (exp.category) elements.expCategory.value = exp.category;
-    elements.expDesc.value = exp.desc;
-    elements.expAmount.value = exp.amount;
-    elements.expCurrency.value = exp.currency === "SGD" ? "SGD" : "LOCAL";
-    
-    renderAddExpenseForm(); // recreate selects/checkboxes
-    elements.expPayer.value = exp.payer;
-    
-    document.querySelectorAll('.split-check').forEach(cb => {
-        cb.checked = exp.splitAmong.includes(cb.value);
+
+    elements.expCategory.value = expense.category || "Shopping & Misc";
+    elements.expDesc.value = expense.desc;
+
+    const savedAsLocal = expense.currency === expense.localCurrencySnapshot;
+    const currentBaseAmount = getExpenseAmountInSelectedBase(expense);
+
+    elements.expAmount.value = savedAsLocal
+        ? formatNumber(expense.amount, 2)
+        : formatNumber(
+            expense.baseCurrencySnapshot === state.baseCurrency ? expense.amount : currentBaseAmount,
+            2
+        );
+    elements.expCurrency.value = savedAsLocal ? "LOCAL" : "BASE";
+
+    renderAddExpenseForm();
+    elements.expCurrency.value = savedAsLocal ? "LOCAL" : "BASE";
+    elements.expPayer.value = expense.payer;
+
+    document.querySelectorAll('.split-check').forEach(checkbox => {
+        checkbox.checked = expense.splitAmong.includes(checkbox.value);
     });
-    
+
     elements.btnSaveExpense.textContent = "Update Expense";
     elements.btnCancelEdit.style.display = "block";
 }
 
 function cancelEditMode() {
     editingExpenseId = null;
+    editingOriginalDate = null;
+    elements.expCategory.value = "Food & Dining";
     elements.expDesc.value = '';
     elements.expAmount.value = '';
+    elements.expCurrency.value = "LOCAL";
     elements.btnSaveExpense.textContent = "Save Expense";
     elements.btnCancelEdit.style.display = "none";
     renderAddExpenseForm();
 }
 
+function deleteExpense(id) {
+    const expense = state.expenses.find(entry => entry.id === id);
+    if (!expense) return;
 
-// --- CALCULATIONS ---
+    if (!confirm(`Delete "${expense.desc || expense.category}"?`)) {
+        return;
+    }
+
+    state.expenses = state.expenses.filter(entry => entry.id !== id);
+    if (editingExpenseId === id) {
+        cancelEditMode();
+    }
+    saveAndRender();
+    showToast("Expense deleted.");
+}
+
 function calculateBalances() {
-    let balances = {};
-    state.friends.forEach(f => balances[f] = 0);
-    
-    state.expenses.forEach(exp => {
-        if (balances[exp.payer] === undefined) balances[exp.payer] = 0;
-        balances[exp.payer] += exp.amountSGD;
-        
-        const splitAmount = exp.amountSGD / exp.splitAmong.length;
-        exp.splitAmong.forEach(person => {
+    const balances = {};
+    state.friends.forEach(friend => {
+        balances[friend] = 0;
+    });
+
+    state.expenses.forEach(expense => {
+        const amountInCurrentBase = getExpenseAmountInSelectedBase(expense);
+
+        if (balances[expense.payer] === undefined) balances[expense.payer] = 0;
+        balances[expense.payer] += amountInCurrentBase;
+
+        const splitAmount = amountInCurrentBase / Math.max(expense.splitAmong.length, 1);
+        expense.splitAmong.forEach(person => {
             if (balances[person] === undefined) balances[person] = 0;
             balances[person] -= splitAmount;
         });
     });
-    
+
     return balances;
 }
 
 function calculateSettlements(balances) {
-    let debtors = [];
-    let creditors = [];
-    
-    for (const [person, amt] of Object.entries(balances)) {
-        if (amt < -0.01) debtors.push({ person, amt: Math.abs(amt) });
-        if (amt > 0.01) creditors.push({ person, amt });
+    const debtors = [];
+    const creditors = [];
+
+    Object.entries(balances).forEach(([person, amount]) => {
+        if (amount < -0.01) debtors.push({ person, amount: Math.abs(amount) });
+        if (amount > 0.01) creditors.push({ person, amount });
+    });
+
+    debtors.sort((left, right) => right.amount - left.amount);
+    creditors.sort((left, right) => right.amount - left.amount);
+
+    const settlements = [];
+    let debtorIndex = 0;
+    let creditorIndex = 0;
+
+    while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+        const debtor = debtors[debtorIndex];
+        const creditor = creditors[creditorIndex];
+        const transferAmount = Math.min(debtor.amount, creditor.amount);
+
+        settlements.push({
+            from: debtor.person,
+            to: creditor.person,
+            amount: transferAmount
+        });
+
+        debtor.amount -= transferAmount;
+        creditor.amount -= transferAmount;
+
+        if (debtor.amount < 0.01) debtorIndex += 1;
+        if (creditor.amount < 0.01) creditorIndex += 1;
     }
-    
-    debtors.sort((a,b) => b.amt - a.amt);
-    creditors.sort((a,b) => b.amt - a.amt);
-    
-    let settlements = [];
-    let i = 0, j = 0;
-    
-    while(i < debtors.length && j < creditors.length) {
-        let debtor = debtors[i];
-        let creditor = creditors[j];
-        
-        let minAmt = Math.min(debtor.amt, creditor.amt);
-        settlements.push({ from: debtor.person, to: creditor.person, amount: minAmt });
-        
-        debtor.amt -= minAmt;
-        creditor.amt -= minAmt;
-        
-        if (debtor.amt < 0.01) i++;
-        if (creditor.amt < 0.01) j++;
-    }
+
     return settlements;
 }
 
-// --- RENDERERS ---
 function renderAll() {
-    elements.canvasHeader.style.display = 'none'; // ensure off in init
-    
-    elements.settingLocalCurr.value = state.localCurrency === "LOCAL" ? "" : state.localCurrency;
+    elements.canvasHeader.style.display = 'none';
+
     elements.settingBaseCurr.value = state.baseCurrency;
-    
-    const currentBase = parseFloat(elements.baseAmount.value) || 1;
-    elements.settingRate.value = +(currentBase * state.exchangeRate).toFixed(4);
-    
-    elements.friendsList.innerHTML = '';
-    state.friends.forEach(f => {
-        const li = document.createElement('li');
-        li.className = 'pill';
-        li.innerHTML = `<span>${f}</span><button onclick="removeFriend('${f}')">&times;</button>`;
-        elements.friendsList.appendChild(li);
-    });
-    
-    if(!editingExpenseId) {
-       renderAddExpenseForm();
-    }
-    
+    elements.settingLocalCurr.value = state.localCurrency;
+
+    const currentBase = numberOrFallback(elements.baseAmount.value, 1);
+    elements.settingRate.value = (currentBase * state.exchangeRate).toFixed(4).replace(/\.?0+$/, "");
+
+    renderFriends();
+    if (!editingExpenseId) renderAddExpenseForm();
     renderBalances();
     renderHistory();
+}
+
+function renderFriends() {
+    elements.friendsList.innerHTML = '';
+
+    state.friends.forEach(friend => {
+        const item = document.createElement('li');
+        item.className = 'pill';
+        item.innerHTML = `
+            <span>${escapeHtml(friend)}</span>
+            <button type="button" data-remove-friend="${escapeHtml(friend)}" aria-label="Remove ${escapeHtml(friend)}">&times;</button>
+        `;
+        elements.friendsList.appendChild(item);
+    });
 }
 
 function saveAndRender() {
@@ -498,101 +721,127 @@ function saveAndRender() {
 }
 
 function renderAddExpenseForm() {
-    elements.expCurrency.options[0].text = state.localCurrency !== "LOCAL" ? state.localCurrency : "Local Currency";
-    
+    const localOption = elements.expCurrency.querySelector('option[value="LOCAL"]');
+    const baseOption = elements.expCurrency.querySelector('option[value="BASE"]');
+
+    if (localOption) {
+        localOption.textContent = state.localCurrency
+            ? `${state.localCurrency} (Local Currency)`
+            : "Local Currency";
+    }
+
+    if (baseOption) {
+        baseOption.textContent = `${state.baseCurrency} (Base Currency)`;
+    }
+
     const selectedPayer = elements.expPayer.value;
     elements.expPayer.innerHTML = '';
     elements.splitCheckboxes.innerHTML = '';
-    
-    state.friends.forEach(f => {
-        const opt = document.createElement('option');
-        opt.value = f;
-        opt.textContent = f;
-        elements.expPayer.appendChild(opt);
-        
+
+    state.friends.forEach(friend => {
+        const option = document.createElement('option');
+        option.value = friend;
+        option.textContent = friend;
+        elements.expPayer.appendChild(option);
+
         const label = document.createElement('label');
         label.className = 'checkbox-item';
-        label.innerHTML = `<input type="checkbox" class="split-check" value="${f}" checked> <span>${f}</span>`;
+        label.innerHTML = `<input type="checkbox" class="split-check" value="${escapeHtml(friend)}" checked> <span>${escapeHtml(friend)}</span>`;
         elements.splitCheckboxes.appendChild(label);
     });
 
     if (selectedPayer && state.friends.includes(selectedPayer)) {
         elements.expPayer.value = selectedPayer;
+    } else if (state.friends.length) {
+        elements.expPayer.value = state.friends[0];
     }
 }
 
 function renderBalances() {
     const balances = calculateBalances();
     const settlements = calculateSettlements(balances);
-    
     const subtitle = document.getElementById('settle-subtitle');
-    if(subtitle) subtitle.innerHTML = `Debts anchored in <strong>${state.baseCurrency}</strong>. Cash equivalents use active rate.`;
-    
-    elements.balancesList.innerHTML = '';
-    for (const [person, amt] of Object.entries(balances)) {
-        if (Math.abs(amt) > 0.01) {
-            const li = document.createElement('li');
-            const isOwed = amt > 0;
-            const absoluteAmt = Math.abs(amt);
-            const localAmt = (absoluteAmt * state.exchangeRate).toFixed(0); // usually local cash doesn't need pennies, or .toFixed(2) depending on bounds.
-            const localString = state.localCurrency === "LOCAL" ? '' : `<div style="font-size:0.75rem; color:var(--text-secondary); font-weight:400;">~ ${parseFloat(localAmt).toLocaleString()} ${state.localCurrency}</div>`;
 
-            li.innerHTML = `
-                <span>${person}</span>
-                <span class="${isOwed ? 'gets' : 'owes'}" style="text-align:right;">
-                    <div>${isOwed ? '+' : ''}${absoluteAmt.toFixed(2)} ${state.baseCurrency}</div>
-                    ${localString}
-                </span>
-            `;
-            elements.balancesList.appendChild(li);
-        }
+    if (subtitle) {
+        subtitle.innerHTML = `Balances shown in <strong>${escapeHtml(state.baseCurrency)}</strong>. Each expense keeps the rate saved with it.`;
     }
-    if (elements.balancesList.innerHTML === '') elements.balancesList.innerHTML = '<li><span style="color:var(--text-secondary)">Everyone is evenly balanced!</span></li>';
-    
-    elements.settlementsList.innerHTML = '';
-    settlements.forEach(s => {
-        const li = document.createElement('li');
-        const localSettle = (s.amount * state.exchangeRate).toFixed(0);
-        const localString = state.localCurrency === "LOCAL" ? '' : `<div style="font-size:0.75rem; color:var(--text-secondary); font-weight:400;">or ${parseFloat(localSettle).toLocaleString()} ${state.localCurrency}</div>`;
 
-        li.innerHTML = `
-            <span><strong>${s.from}</strong> <svg style="width:16px;height:16px;vertical-align:middle;margin:0 4px;color:var(--text-secondary)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> <strong>${s.to}</strong></span>
-            <span class="owes" style="text-align:right;">
-                <div>${s.amount.toFixed(2)} ${state.baseCurrency}</div>
-                ${localString}
+    elements.balancesList.innerHTML = '';
+    Object.entries(balances).forEach(([person, amount]) => {
+        if (Math.abs(amount) <= 0.01) return;
+
+        const item = document.createElement('li');
+        const isOwed = amount > 0;
+        const absoluteAmount = Math.abs(amount);
+        const localEquivalent = state.localCurrency
+            ? `<div style="font-size:0.75rem; color:var(--text-secondary); font-weight:400;">~ ${parseFloat((absoluteAmount * state.exchangeRate).toFixed(0)).toLocaleString()} ${escapeHtml(state.localCurrency)}</div>`
+            : "";
+
+        item.innerHTML = `
+            <span>${escapeHtml(person)}</span>
+            <span class="${isOwed ? 'gets' : 'owes'}" style="text-align:right;">
+                <div>${isOwed ? '+' : ''}${absoluteAmount.toFixed(2)} ${escapeHtml(state.baseCurrency)}</div>
+                ${localEquivalent}
             </span>
         `;
-        elements.settlementsList.appendChild(li);
+        elements.balancesList.appendChild(item);
     });
-    if (elements.settlementsList.innerHTML === '') elements.settlementsList.innerHTML = '<li><span style="color:var(--text-secondary)">No payments needed.</span></li>';
-}
 
-// Global hook for the onclick attribute
-window.setupEditExpense = setupEditExpense;
-window.removeFriend = removeFriend;
+    if (!elements.balancesList.innerHTML) {
+        elements.balancesList.innerHTML = '<li><span style="color:var(--text-secondary)">Everyone is evenly balanced.</span></li>';
+    }
+
+    elements.settlementsList.innerHTML = '';
+    settlements.forEach(settlement => {
+        const item = document.createElement('li');
+        const localEquivalent = state.localCurrency
+            ? `<div style="font-size:0.75rem; color:var(--text-secondary); font-weight:400;">or ${parseFloat((settlement.amount * state.exchangeRate).toFixed(0)).toLocaleString()} ${escapeHtml(state.localCurrency)}</div>`
+            : "";
+
+        item.innerHTML = `
+            <span><strong>${escapeHtml(settlement.from)}</strong> <svg style="width:16px;height:16px;vertical-align:middle;margin:0 4px;color:var(--text-secondary)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg> <strong>${escapeHtml(settlement.to)}</strong></span>
+            <span class="owes" style="text-align:right;">
+                <div>${settlement.amount.toFixed(2)} ${escapeHtml(state.baseCurrency)}</div>
+                ${localEquivalent}
+            </span>
+        `;
+        elements.settlementsList.appendChild(item);
+    });
+
+    if (!elements.settlementsList.innerHTML) {
+        elements.settlementsList.innerHTML = '<li><span style="color:var(--text-secondary)">No payments needed.</span></li>';
+    }
+}
 
 function renderHistory() {
     elements.historyList.innerHTML = '';
-    const rev = [...state.expenses].reverse();
-    rev.forEach(exp => {
-        const li = document.createElement('li');
-        const dateStr = new Date(exp.date).toLocaleDateString();
-        const catLabel = exp.category ? `[${exp.category}] ` : '';
-        const localCode = exp.currency !== "SGD" ? exp.currency : state.localCurrency;
-        const rateLabel = exp.rateSnapshot ? `<br><span style="font-size:0.75rem; color:var(--text-secondary);">Applied Rate: 1 SGD = ${exp.rateSnapshot} ${localCode}</span>` : '';
-        li.innerHTML = `
+
+    [...state.expenses].reverse().forEach(expense => {
+        const item = document.createElement('li');
+        const dateString = new Date(expense.date).toLocaleDateString();
+        const categoryLabel = expense.category ? `[${expense.category}] ` : '';
+        const snapshotLabel = `Saved rate: 1 ${expense.baseCurrencySnapshot} = ${expense.rateSnapshot} ${expense.localCurrencySnapshot}`;
+
+        item.innerHTML = `
             <div class="history-item-left" style="flex:1">
-                <div class="title"><span style="color:var(--accent); font-size:0.85rem; margin-right:4px;">${catLabel}</span>${exp.desc}</div>
-                <div class="meta">${exp.payer} paid • ${dateStr} ${rateLabel}</div>
+                <div class="title"><span style="color:var(--accent); font-size:0.85rem; margin-right:4px;">${escapeHtml(categoryLabel)}</span>${escapeHtml(expense.desc || "Untitled expense")}</div>
+                <div class="meta">${escapeHtml(expense.payer)} paid • ${dateString}<br><span style="font-size:0.75rem; color:var(--text-secondary);">${escapeHtml(snapshotLabel)}</span></div>
             </div>
-            <div class="history-item-right" style="margin-right:12px;">
-                <div style="font-size: 0.95rem;">${exp.amount.toFixed(2)} ${exp.currency}</div>
+            <div class="history-item-right">
+                <div style="font-size: 0.95rem;">${expense.amount.toFixed(2)} ${escapeHtml(expense.currency)}</div>
+                <div style="font-size:0.75rem; color:var(--text-secondary);">Now ≈ ${escapeHtml(getCurrentBaseAmountLabel(expense))}</div>
             </div>
-            <button class="btn secondary-btn" style="width:auto; padding:6px 12px; font-size:0.75rem;" onclick="setupEditExpense('${exp.id}')">Edit</button>
+            <div class="history-actions">
+                <button class="btn secondary-btn action-btn" type="button" data-action="edit" data-expense-id="${expense.id}">Edit</button>
+                <button class="btn danger-btn action-btn" type="button" data-action="delete" data-expense-id="${expense.id}">Delete</button>
+            </div>
         `;
-        elements.historyList.appendChild(li);
+        elements.historyList.appendChild(item);
     });
-    if (elements.historyList.innerHTML === '') elements.historyList.innerHTML = '<li style="color:var(--text-secondary);">No expenses logged yet.</li>';
+
+    if (!elements.historyList.innerHTML) {
+        elements.historyList.innerHTML = '<li style="color:var(--text-secondary);">No expenses logged yet.</li>';
+    }
 }
 
 init();
