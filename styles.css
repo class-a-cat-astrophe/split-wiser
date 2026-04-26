@@ -307,11 +307,18 @@ input[type="checkbox"] {
     width: 100%;
     background: rgba(15, 23, 42, 0.9);
     backdrop-filter: blur(10px);
-    border-top: 1px solid var(--border);
     display: flex;
     justify-content: space-around;
     padding: 6px 0 4px;
     padding-bottom: max(4px, env(safe-area-inset-bottom, 4px));
+}
+.bottom-nav::before {
+    content: "";
+    position: absolute;
+    top: -38px;
+    left: 0;
+    width: 100%;
+    border-top: 1px solid var(--border);
 }
 .nav-btn {
     background: transparent;
