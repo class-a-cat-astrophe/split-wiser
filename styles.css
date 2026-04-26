@@ -71,9 +71,9 @@ header h1 {
 }
 
 .header-help-btn {
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-secondary);
+    border: 1px solid #059669;
+    background: #10b981;
+    color: white;
     border-radius: 999px;
     padding: 7px 12px;
     font-size: 0.75rem;
@@ -82,8 +82,8 @@ header h1 {
 }
 
 .header-help-btn:hover {
-    color: var(--text-primary);
-    border-color: var(--accent);
+    background: #059669;
+    border-color: #047857;
 }
 
 .hidden {
