@@ -144,6 +144,17 @@ header h1 {
     gap: 12px;
 }
 
+.onboarding-note {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
 .onboarding-step {
     display: flex;
     gap: 12px;
