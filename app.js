@@ -297,7 +297,7 @@ function removeFriend(name) {
     );
 
     if (isReferenced) {
-        showToast("Edit or delete related expenses before removing that traveler.", true);
+        showToast("Edit or delete related expenses before removing that friend.", true);
         return;
     }
 
@@ -577,7 +577,7 @@ function saveExpense() {
     });
 
     if (!state.friends.length) {
-        showToast("Error: Add at least one traveler first.", true);
+        showToast("Error: Add at least one friend first.", true);
         return;
     }
 
@@ -587,7 +587,7 @@ function saveExpense() {
     }
 
     if (splitAmong.length === 0) {
-        showToast("Error: Include at least one traveler in the split.", true);
+        showToast("Error: Include at least one friend in the split.", true);
         return;
     }
 
