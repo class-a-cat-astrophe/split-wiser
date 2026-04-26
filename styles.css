@@ -331,14 +331,14 @@ input[type="checkbox"] {
     cursor: pointer;
     width: 60px;
     transition: color 0.2s;
-    transform: translateY(-8px);
+    transform: translateY(-9px);
 }
 .nav-btn svg {
-    width: 24px;
-    height: 24px;
+    width: 26.4px;
+    height: 26.4px;
 }
 .nav-btn span {
-    font-size: 0.7rem;
+    font-size: 0.77rem;
     font-weight: 500;
     line-height: 1;
 }
