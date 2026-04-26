@@ -1,47 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Split Wiser</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Toast -->
+        <div id="toast" class="toast"></div>
+        <!-- Header -->
+        <header data-html2canvas-ignore>
+            <h1 id="app-title">Split Wiser</h1>
+            <div class="header-actions">
+                <span class="badge" style="background:transparent; border:none; opacity:0.7;">Each expense keeps its saved rate</span>
+            </div>
+        </header> 
 
-Split Wiser
-Each expense keeps its saved rate
-Add Expense
-Category *
-                                Food & Dining
-                                Transport
-                                Accommodation
-                                Activity
-                                Shopping & Misc
-                            
-Location / Details
-📍
-Amount *
-Currency *
-                                Local Currency
-                                Base Currency
-                            
-Who Paid?
-                            
-                        
-Split between (Uncheck if excluded)
+        <!-- Main Content Area -->
+        <main id="main-content">
+            
+            <!-- View: Add Expense -->
+            <section id="view-add-expense" class="view active-view" data-html2canvas-ignore>
+                <h2>Add Expense</h2>
+                <div class="card">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label>Category <span class="required-star">*</span></label>
+                            <select id="expense-category">
+                                <option value="Food & Dining">Food & Dining</option>
+                                <option value="Transport">Transport</option>
+                                <option value="Accommodation">Accommodation</option>
+                                <option value="Activity">Activity</option>
+                                <option value="Shopping & Misc">Shopping & Misc</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Location / Details</label>
+                        <div class="input-with-btn">
+                            <input type="text" id="expense-desc" placeholder="Shibuya Crossing">
+                            <button id="btn-geolocate" class="btn secondary-btn" style="flex:0; padding:12px 16px;" type="button" title="Auto-fill GPS location" aria-label="Auto-fill GPS location">📍</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Amount <span class="required-star">*</span></label>
+                            <input type="number" id="expense-amount" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Currency <span class="required-star">*</span></label>
+                            <select id="expense-currency">
+                                <option value="LOCAL">Local Currency</option>
+                                <option value="BASE">Base Currency</option>
+                            </select>
+                        </div>
+                    </div>
 
-Save Expense
-Who Owes Who
-📸 Share Image
-Trip Dashboard
-Debts anchored in base currency.
-	•	
-Net Group Balances
-	•	
-Expenses History
-	•	
-Trip Settings
-Currencies
-Base Currency
-SGD
-=
-Local Currency
+                    <div class="form-group">
+                        <label>Who Paid?</label>
+                        <select id="expense-payer">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
 
-Fetch Live Rate Fetch fills the current live rate. Each saved expense keeps the rate it was created with.
-Friends
-Add
-	•	
-Data Management
-📊 Download Excel (CSV) 🧨 Wipe All Data
-Add History Settle Settings
+                    <div class="form-group">
+                        <label>Split between (Uncheck if excluded)</label>
+                        <div id="split-checkboxes" class="checkbox-group">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <button class="btn primary-btn" id="btn-save-expense">Save Expense</button>
+                    <button class="btn danger-btn" id="btn-cancel-edit" style="display:none; margin-top:10px;">Cancel Edit</button>
+                </div>
+            </section>
+
+            <!-- View: Balances (Capture Target) -->
+            <section id="view-balances" class="view">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;" data-html2canvas-ignore>
+                    <h2 style="margin:0;">Who Owes Who</h2>
+                    <button id="btn-share-dash" class="btn secondary-btn" style="width:auto; padding:8px 14px; font-size:0.85rem; color: #fff; background: var(--accent);">📸 Share Image</button>
+                </div>
+                
+                <!-- This card acts as our dashboard canvas -->
+                <div class="card" id="dashboard-capture-area">
+                    <h2 style="margin-bottom: 5px; color: var(--accent);" id="canvas-header">Trip Dashboard</h2>
+                    <p class="subtitle" id="settle-subtitle" style="margin-bottom: 16px; color: var(--text-secondary); font-size: 0.8rem;">Debts anchored in base currency.</p>
+                    
+                    <ul id="settlements-list" class="balances-list" style="margin-bottom:24px;">
+                        <!-- Populated by JS -->
+                    </ul>
+                    
+                    <h3 style="border-top:1px solid var(--border); padding-top:16px; margin-top:20px;">Net Group Balances</h3>
+                    <ul id="balances-list" class="balances-list">
+                         <!-- Populated by JS -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- View: History -->
+            <section id="view-history" class="view" data-html2canvas-ignore>
+                <h2>Expenses History</h2>
+                <div class="card flush">
+                    <ul id="history-list" class="history-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- View: Settings (Friends & Currency) -->
+            <section id="view-settings" class="view" data-html2canvas-ignore>
+                <h2>Trip Settings</h2>
+                <div class="card">
+                    <h3>Currencies</h3>
+                    <div class="form-group">
+                            <label>Base Currency</label>
+                        <div class="input-with-btn">
+                            <input type="number" id="base-amount" value="1" placeholder="1">
+                            <input type="text" id="setting-base-curr" value="SGD" style="width: 80px; flex: 0 0 auto; text-align:center;">
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin: -5px 0 10px 0; color: var(--text-secondary); font-size: 1.2rem; font-weight:600;">=</div>
+
+                    <div class="form-group">
+                            <label>Local Currency</label>
+                        <div class="input-with-btn">
+                            <input type="number" id="setting-rate" placeholder="110">
+                            <input list="currency-options" id="setting-local-curr" placeholder="Code..." style="width: 100px; flex: 0 0 auto;">
+                        </div>
+                        <datalist id="currency-options">
+                            <option value="USD">US Dollar (USA)</option>
+                            <option value="EUR">Euro (Europe)</option>
+                            <option value="GBP">British Pound (UK)</option>
+                            <option value="JPY">Japanese Yen (Japan)</option>
+                            <option value="KRW">South Korean Won (Korea)</option>
+                            <option value="IDR">Indonesian Rupiah (Indonesia)</option>
+                            <option value="THB">Thai Baht (Thailand)</option>
+                            <option value="AUD">Australian Dollar (Australia)</option>
+                            <option value="CAD">Canadian Dollar (Canada)</option>
+                            <option value="CNY">Chinese Yuan (China)</option>
+                            <option value="MYR">Malaysian Ringgit (Malaysia)</option>
+                            <option value="PHP">Philippine Peso (Philippines)</option>
+                            <option value="VND">Vietnamese Dong (Vietnam)</option>
+                            <option value="HKD">Hong Kong Dollar (HK)</option>
+                            <option value="TWD">New Taiwan Dollar (Taiwan)</option>
+                        </datalist>
+                    </div>
+
+                    <button id="btn-fetch-rate" class="btn secondary-btn" style="margin-top: 10px;">Fetch Live Rate</button>
+                    <small class="hint" style="margin-top:8px;">Fetch fills the current live rate. Each saved expense keeps the rate it was created with.</small>
+                </div>
+
+                <div class="card">
+                    <h3>Friends</h3>
+                    <div class="form-group input-with-btn">
+                        <input type="text" id="new-friend-name" placeholder="Friend's name">
+                        <button id="btn-add-friend" class="btn secondary-btn">Add</button>
+                    </div>
+                    <ul id="friends-list" class="pill-list">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+                
+                <div class="card" style="margin-top:20px;">
+                    <h3>Data Management</h3>
+                    <button class="btn" id="btn-download-csv" type="button" style="margin-bottom:12px; background: #10b981; color: white;">📊 Download Excel (CSV)</button>
+                    <button class="btn danger-btn" id="btn-clear-data" type="button">🧨 Wipe All Data</button>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav" data-html2canvas-ignore>
+            <button class="nav-btn active" data-target="view-add-expense" type="button" aria-label="Open Add Expense view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Add</span>
+            </button>
+            <button class="nav-btn" data-target="view-history" type="button" aria-label="Open History view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>History</span>
+            </button>
+            <button class="nav-btn" data-target="view-balances" type="button" aria-label="Open Balances view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                <span>Settle</span>
+            </button>
+            <button class="nav-btn" data-target="view-settings" type="button" aria-label="Open Settings view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Settings</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
