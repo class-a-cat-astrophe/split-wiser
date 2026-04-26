@@ -6,7 +6,9 @@ const DEFAULT_STATE = {
     exchangeRate: 110,
     fetchDate: null,
     historicalRates: {},
-    hasSeenOnboarding: false
+    hasSeenOnboarding: false,
+    lastSharedAt: null,
+    lastShareReminderDate: null
 };
 
 let state = structuredClone(DEFAULT_STATE);
@@ -141,7 +143,9 @@ function migrateState(rawState) {
         historicalRates: rawState.historicalRates && typeof rawState.historicalRates === "object"
             ? rawState.historicalRates
             : {},
-        hasSeenOnboarding: Boolean(rawState.hasSeenOnboarding)
+        hasSeenOnboarding: Boolean(rawState.hasSeenOnboarding),
+        lastSharedAt: rawState.lastSharedAt || null,
+        lastShareReminderDate: rawState.lastShareReminderDate || null
     };
 }
 
@@ -393,9 +397,41 @@ function openView(targetId) {
         cancelEditMode();
     }
 
-    if (targetId === 'view-balances') renderBalances();
+    if (targetId === 'view-balances') {
+        renderBalances();
+        maybeRemindDailyShare();
+    }
     if (targetId === 'view-history') renderHistory();
     if (targetId === 'view-add-expense') renderAddExpenseForm();
+}
+
+function getTodayKey() {
+    return new Date().toLocaleDateString();
+}
+
+function getTodayExpenseCount() {
+    const todayKey = getTodayKey();
+    return state.expenses.filter(expense =>
+        new Date(expense.date).toLocaleDateString() === todayKey
+    ).length;
+}
+
+function hasSharedToday() {
+    if (!state.lastSharedAt) return false;
+    return new Date(state.lastSharedAt).toLocaleDateString() === getTodayKey();
+}
+
+function maybeRemindDailyShare() {
+    const todayKey = getTodayKey();
+    const todayExpenseCount = getTodayExpenseCount();
+
+    if (todayExpenseCount < 5) return;
+    if (hasSharedToday()) return;
+    if (state.lastShareReminderDate === todayKey) return;
+
+    state.lastShareReminderDate = todayKey;
+    saveState();
+    showToast("Daily tip: Share today’s balance with your group for transparency.");
 }
 
 function swapCurrencies() {
@@ -541,6 +577,9 @@ async function shareDashboardImage() {
                     text: `Here are the current balances for our trip. Shared on ${sharedAt}.`,
                     files: [file]
                 });
+                state.lastSharedAt = new Date().toISOString();
+                state.lastShareReminderDate = getTodayKey();
+                saveState();
             } else {
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -550,6 +589,9 @@ async function shareDashboardImage() {
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
+                state.lastSharedAt = new Date().toISOString();
+                state.lastShareReminderDate = getTodayKey();
+                saveState();
                 alert("Your browser downloaded the image so you can share it manually.");
             }
         });
